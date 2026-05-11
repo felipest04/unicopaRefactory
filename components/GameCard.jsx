@@ -2,15 +2,20 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import { getTeamLogo } from "../assets/teamLogos";
 import { jogoTemBrasil } from "../utils/jogos";
 
+// Renderiza as informacoes de uma partida.
 export default function GameCard({ game }) {
+  // Identifica se a partida envolve a selecao brasileira.
   const isBrasilGame = jogoTemBrasil(game);
 
   return (
+    // Aplica destaque visual em jogos do Brasil.
     <View style={[styles.jogo, isBrasilGame && styles.jogoBrasil]}>
+      {/* Mostra grupo/fase e confronto. */}
       <Text style={styles.grupo}>
         {game.grupo ? `GRUPO ${game.grupo}: ` : game.fase} {game.confronto}
       </Text>
 
+      {/* Linha principal com mandante, horario e visitante. */}
       <View style={styles.linhaPrincipal}>
         <View style={styles.time}>
           <TeamLogo sigla={game.sigla_casa} />
@@ -28,6 +33,7 @@ export default function GameCard({ game }) {
         </View>
       </View>
 
+      {/* Informacoes do estadio e local da partida. */}
       <View style={styles.local}>
         <Text style={styles.subTitulo}>{game.estadio}</Text>
         <Text style={styles.subTitulo}>
@@ -38,10 +44,13 @@ export default function GameCard({ game }) {
   );
 }
 
+// Exibe a bandeira da selecao ou um marcador quando nao houver logo.
 function TeamLogo({ sigla }) {
+  // Busca a imagem da selecao pelo codigo de sigla.
   const logo = getTeamLogo(sigla);
 
   if (!logo) {
+    // Fallback para fases eliminatorias ainda sem selecao definida.
     return (
       <View style={styles.bandeiraPlaceholder}>
         <Text style={styles.placeholderText}>{sigla.slice(0, 2)}</Text>
@@ -52,6 +61,7 @@ function TeamLogo({ sigla }) {
   return <Image style={styles.bandeira} source={logo} />;
 }
 
+// Estilos do card de jogo, bandeiras e textos.
 const styles = StyleSheet.create({
   jogo: {
     marginBottom: 20,

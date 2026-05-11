@@ -1,3 +1,4 @@
+// Mapeia a sigla da selecao para o arquivo local da bandeira.
 export const teamLogos = {
   ALG: require("./jogos/Algeria.png"),
   ARG: require("./jogos/argentina.png"),
@@ -49,6 +50,7 @@ export const teamLogos = {
   UZB: require("./jogos/uzbekistán.png"),
 };
 
+// Retorna a logo correspondente a sigla recebida.
 export function getTeamLogo(sigla) {
   return teamLogos[sigla];
 }
