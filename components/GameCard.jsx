@@ -8,7 +8,7 @@ export default function GameCard({ game }) {
   return (
     <View style={[styles.jogo, isBrasilGame && styles.jogoBrasil]}>
       <Text style={styles.grupo}>
-        {game.grupo ? `GRUPO ${game.grupo}` : game.fase} {game.confronto}
+        {game.grupo ? `GRUPO ${game.grupo}: ` : game.fase} {game.confronto}
       </Text>
 
       <View style={styles.linhaPrincipal}>

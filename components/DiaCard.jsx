@@ -1,11 +1,19 @@
 import { StyleSheet, Text, View } from "react-native";
 import GameCard from "./GameCard";
-import { formatarDataBrasil } from "../utils/date";
+import { isDataAtual, formatarDataBrasil } from "../utils/date";
 
 export default function DiaCard({ data, jogos }) {
+  const isHoje = isDataAtual(data);
+
   return (
-    <View style={styles.card}>
-      <Text style={styles.data}>{formatarDataBrasil(data)}</Text>
+    <View style={[styles.card, isHoje && styles.cardHoje]}>
+      <View style={styles.cabecalho}>
+        <Text style={[styles.data, isHoje && styles.dataHoje]}>
+          {formatarDataBrasil(data)}
+        </Text>
+
+        {isHoje && <Text style={styles.badgeHoje}>HOJE</Text>}
+      </View>
 
       {jogos.map((jogo) => (
         <GameCard key={jogo.id} game={jogo} />
@@ -22,10 +30,32 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 15,
   },
+  cardHoje: {
+    backgroundColor: "#102817",
+    borderWidth: 1,
+    borderColor: "#32d16d",
+  },
+  cabecalho: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
   data: {
     color: "#f2cc2f",
     fontSize: 22,
     fontWeight: "bold",
-    marginBottom: 10,
+  },
+  dataHoje: {
+    color: "#32d16d",
+  },
+  badgeHoje: {
+    color: "#04120a",
+    backgroundColor: "#32d16d",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 10,
+    fontWeight: "700",
   },
 });
