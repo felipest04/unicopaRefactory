@@ -13,8 +13,14 @@ export function agruparJogosPorData(jogos) {
 
   return Object.keys(jogosPorData).map((data) => ({
     data,
-    jogos: jogosPorData[data],
+    jogos: ordenarJogosPorHorario(jogosPorData[data]),
   }));
+}
+
+export function ordenarJogosPorHorario(jogos) {
+  return [...jogos].sort((jogoA, jogoB) =>
+    jogoA.hora_brasilia.localeCompare(jogoB.hora_brasilia)
+  );
 }
 
 export function jogoTemBrasil(jogo) {
