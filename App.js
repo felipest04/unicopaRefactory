@@ -3,6 +3,8 @@ import {
   FlatList,
   Image,
   ImageBackground,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
 } from "react-native";
@@ -11,9 +13,35 @@ import dados from "./assets/dados.json";
 import { agruparJogosPorData } from "./utils/jogos";
 
 export default function App() {
+  const [grupoSelecionado, setGrupoSelecionado] = useState("Todos");
   const [favoritos, setFavoritos] = useState(() => new Set());
 
-  const jogosPorDia = useMemo(() => agruparJogosPorData(dados.jogos), []);
+  const grupos = useMemo(
+    () =>
+      [
+        "Todos",
+        ...new Set(
+          dados.jogos
+            .map((jogo) => jogo.grupo)
+            .filter(Boolean)
+            .sort((grupoA, grupoB) => grupoA.localeCompare(grupoB))
+        ),
+      ],
+    []
+  );
+
+  const jogosFiltrados = useMemo(() => {
+    if (grupoSelecionado === "Todos") {
+      return dados.jogos;
+    }
+
+    return dados.jogos.filter((jogo) => jogo.grupo === grupoSelecionado);
+  }, [grupoSelecionado]);
+
+  const jogosPorDia = useMemo(
+    () => agruparJogosPorData(jogosFiltrados),
+    [jogosFiltrados]
+  );
 
   const alternarFavorito = (jogoId) => {
     setFavoritos((favoritosAtuais) => {
@@ -37,6 +65,43 @@ export default function App() {
       <Image style={styles.logo} source={require("./assets/unicopa.png")} />
 
       <Text style={styles.title}>CALENDARIO</Text>
+
+      <ScrollView
+        horizontal
+        style={styles.filtrosContainer}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filtros}
+      >
+        {grupos.map((grupo) => {
+          const isSelecionado = grupo === grupoSelecionado;
+
+          return (
+            <Pressable
+              key={grupo}
+              onPress={() => setGrupoSelecionado(grupo)}
+              style={[
+                styles.filtroGrupo,
+                isSelecionado && styles.filtroGrupoSelecionado,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                grupo === "Todos"
+                  ? "Exibir todos os grupos"
+                  : `Filtrar jogos do grupo ${grupo}`
+              }
+            >
+              <Text
+                style={[
+                  styles.filtroGrupoTexto,
+                  isSelecionado && styles.filtroGrupoTextoSelecionado,
+                ]}
+              >
+                {grupo === "Todos" ? "TODOS" : `GRUPO ${grupo}`}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       <FlatList
         data={jogosPorDia}
@@ -74,6 +139,38 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
     color: "white",
+  },
+  filtrosContainer: {
+    maxHeight: 58,
+  },
+  filtros: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 4,
+    gap: 8,
+  },
+  filtroGrupo: {
+    height: 36,
+    minWidth: 76,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#28415b",
+    backgroundColor: "#0c1b2a",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  filtroGrupoSelecionado: {
+    backgroundColor: "#f2cc2f",
+    borderColor: "#f2cc2f",
+  },
+  filtroGrupoTexto: {
+    color: "#8fa3b8",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  filtroGrupoTextoSelecionado: {
+    color: "#04120a",
   },
   lista: {
     paddingBottom: 24,
