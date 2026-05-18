@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  Alert,
   FlatList,
   Image,
   ImageBackground,
@@ -12,10 +13,12 @@ import {
 import DiaCard from "./components/DiaCard";
 import dados from "./assets/dados.json";
 import { agruparJogosPorData } from "./utils/jogos";
+import { importarJogosDoJson } from "./utils/importarJogos";
 
 export default function App() {
   const [grupoSelecionado, setGrupoSelecionado] = useState("Todos");
   const [favoritos, setFavoritos] = useState(() => new Set());
+  const [isImportandoJogos, setIsImportandoJogos] = useState(false);
 
   const grupos = useMemo(
     () =>
@@ -58,6 +61,26 @@ export default function App() {
     });
   };
 
+  const importarJogos = async () => {
+    setIsImportandoJogos(true);
+
+    try {
+      const resultado = await importarJogosDoJson();
+
+      Alert.alert(
+        "Importacao concluida",
+        `${resultado.total} jogos foram processados na tabela ${resultado.tabela} usando ${resultado.campoUnico} para evitar duplicidade.`
+      );
+    } catch (error) {
+      Alert.alert(
+        "Erro na importacao",
+        error?.message || "Nao foi possivel importar os jogos do JSON."
+      );
+    } finally {
+      setIsImportandoJogos(false);
+    }
+  };
+
   return (
     <ImageBackground
       style={styles.container}
@@ -65,7 +88,7 @@ export default function App() {
     >
       <Image style={styles.logo} source={require("./assets/unicopa.png")} />
 
-      <Text style={styles.title}>CALENDARIO</Text>
+      <Text style={styles.title}>CALENDÁRIO</Text>
 
       <View style={styles.filtrosContainer}>
         <ScrollView
@@ -104,6 +127,23 @@ export default function App() {
             );
           })}
         </ScrollView>
+      </View>
+
+      <View style={styles.importacaoContainer}>
+        <Pressable
+          onPress={importarJogos}
+          disabled={isImportandoJogos}
+          style={[
+            styles.botaoImportar,
+            isImportandoJogos && styles.botaoImportarDesabilitado,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Importar jogos do JSON para o banco"
+        >
+          <Text style={styles.botaoImportarTexto}>
+            {isImportandoJogos ? "IMPORTANDO..." : "IMPORTAR JOGOS"}
+          </Text>
+        </Pressable>
       </View>
 
       <FlatList
@@ -186,5 +226,25 @@ const styles = StyleSheet.create({
   },
   lista: {
     paddingBottom: 24,
+  },
+  importacaoContainer: {
+    width: 320,
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  botaoImportar: {
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: "#32d16d",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  botaoImportarDesabilitado: {
+    opacity: 0.6,
+  },
+  botaoImportarTexto: {
+    color: "#04120a",
+    fontSize: 12,
+    fontWeight: "700",
   },
 });
