@@ -6,7 +6,6 @@ import { isDataAtual, formatarDataBrasil } from "../utils/date";
 export default function DiaCard({
   data,
   jogos,
-  favoritos,
   onAlternarFavorito,
 }) {
   // Verifica se a data do card corresponde ao dia atual.
@@ -29,7 +28,7 @@ export default function DiaCard({
         <GameCard
           key={jogo.id}
           game={jogo}
-          isFavorito={favoritos.has(jogo.id)}
+          isFavorito={Boolean(jogo.favorito)}
           onAlternarFavorito={onAlternarFavorito}
         />
       ))}

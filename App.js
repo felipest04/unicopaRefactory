@@ -13,11 +13,13 @@ import {
 import DiaCard from "./components/DiaCard";
 import { agruparJogosPorData } from "./utils/jogos";
 import { importarJogosDoJson } from "./utils/importarJogos";
-import { listarJogosDoBanco } from "./utils/jogosBanco";
+import {
+  atualizarFavoritoDoJogo,
+  listarJogosDoBanco,
+} from "./utils/jogosBanco";
 
 export default function App() {
   const [grupoSelecionado, setGrupoSelecionado] = useState("Todos");
-  const [favoritos, setFavoritos] = useState(() => new Set());
   const [jogos, setJogos] = useState([]);
   const [isCarregandoJogos, setIsCarregandoJogos] = useState(true);
   const [isImportandoJogos, setIsImportandoJogos] = useState(false);
@@ -29,7 +31,12 @@ export default function App() {
 
     try {
       const jogosDoBanco = await listarJogosDoBanco();
-      setJogos(jogosDoBanco);
+      setJogos(
+        jogosDoBanco.map((jogo) => ({
+          ...jogo,
+          favorito: Boolean(jogo.favorito),
+        }))
+      );
     } catch (error) {
       const mensagem =
         error?.message || "Nao foi possivel carregar os jogos do banco.";
@@ -72,18 +79,35 @@ export default function App() {
     [jogosFiltrados]
   );
 
-  const alternarFavorito = (jogoId) => {
-    setFavoritos((favoritosAtuais) => {
-      const novosFavoritos = new Set(favoritosAtuais);
+  const alternarFavorito = async (jogoId) => {
+    const jogoAtual = jogos.find((jogo) => jogo.id === jogoId);
 
-      if (novosFavoritos.has(jogoId)) {
-        novosFavoritos.delete(jogoId);
-      } else {
-        novosFavoritos.add(jogoId);
-      }
+    if (!jogoAtual) {
+      return;
+    }
 
-      return novosFavoritos;
-    });
+    const novoFavorito = !Boolean(jogoAtual.favorito);
+
+    setJogos((jogosAtuais) =>
+      jogosAtuais.map((jogo) =>
+        jogo.id === jogoId ? { ...jogo, favorito: novoFavorito } : jogo
+      )
+    );
+
+    try {
+      await atualizarFavoritoDoJogo(jogoId, novoFavorito);
+    } catch (error) {
+      setJogos((jogosAtuais) =>
+        jogosAtuais.map((jogo) =>
+          jogo.id === jogoId ? { ...jogo, favorito: jogoAtual.favorito } : jogo
+        )
+      );
+
+      Alert.alert(
+        "Erro ao atualizar favorito",
+        error?.message || "Nao foi possivel salvar o favorito no banco."
+      );
+    }
   };
 
   const importarJogos = async () => {
@@ -189,7 +213,6 @@ export default function App() {
           <DiaCard
             data={item.data}
             jogos={item.jogos}
-            favoritos={favoritos}
             onAlternarFavorito={alternarFavorito}
           />
         )}

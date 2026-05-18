@@ -15,3 +15,14 @@ export async function listarJogosDoBanco() {
 
   return data || [];
 }
+
+export async function atualizarFavoritoDoJogo(jogoId, favorito) {
+  const { error } = await supabase
+    .from(TABELA_JOGOS)
+    .update({ favorito })
+    .eq("id", jogoId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
