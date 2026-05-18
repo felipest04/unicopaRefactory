@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -11,36 +11,61 @@ import {
   View,
 } from "react-native";
 import DiaCard from "./components/DiaCard";
-import dados from "./assets/dados.json";
 import { agruparJogosPorData } from "./utils/jogos";
 import { importarJogosDoJson } from "./utils/importarJogos";
+import { listarJogosDoBanco } from "./utils/jogosBanco";
 
 export default function App() {
   const [grupoSelecionado, setGrupoSelecionado] = useState("Todos");
   const [favoritos, setFavoritos] = useState(() => new Set());
+  const [jogos, setJogos] = useState([]);
+  const [isCarregandoJogos, setIsCarregandoJogos] = useState(true);
   const [isImportandoJogos, setIsImportandoJogos] = useState(false);
+  const [erroJogos, setErroJogos] = useState("");
+
+  const carregarJogos = async () => {
+    setIsCarregandoJogos(true);
+    setErroJogos("");
+
+    try {
+      const jogosDoBanco = await listarJogosDoBanco();
+      setJogos(jogosDoBanco);
+    } catch (error) {
+      const mensagem =
+        error?.message || "Nao foi possivel carregar os jogos do banco.";
+
+      setErroJogos(mensagem);
+      Alert.alert("Erro ao carregar jogos", mensagem);
+    } finally {
+      setIsCarregandoJogos(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarJogos();
+  }, []);
 
   const grupos = useMemo(
     () =>
       [
         "Todos",
         ...new Set(
-          dados.jogos
+          jogos
             .map((jogo) => jogo.grupo)
             .filter(Boolean)
             .sort((grupoA, grupoB) => grupoA.localeCompare(grupoB))
         ),
       ],
-    []
+    [jogos]
   );
 
   const jogosFiltrados = useMemo(() => {
     if (grupoSelecionado === "Todos") {
-      return dados.jogos;
+      return jogos;
     }
 
-    return dados.jogos.filter((jogo) => jogo.grupo === grupoSelecionado);
-  }, [grupoSelecionado]);
+    return jogos.filter((jogo) => jogo.grupo === grupoSelecionado);
+  }, [grupoSelecionado, jogos]);
 
   const jogosPorDia = useMemo(
     () => agruparJogosPorData(jogosFiltrados),
@@ -71,6 +96,8 @@ export default function App() {
         "Importacao concluida",
         `${resultado.total} jogos foram processados na tabela ${resultado.tabela} usando ${resultado.campoUnico} para evitar duplicidade.`
       );
+
+      await carregarJogos();
     } catch (error) {
       Alert.alert(
         "Erro na importacao",
@@ -88,7 +115,7 @@ export default function App() {
     >
       <Image style={styles.logo} source={require("./assets/unicopa.png")} />
 
-      <Text style={styles.title}>CALENDÁRIO</Text>
+      <Text style={styles.title}>CALENDARIO</Text>
 
       <View style={styles.filtrosContainer}>
         <ScrollView
@@ -132,10 +159,11 @@ export default function App() {
       <View style={styles.importacaoContainer}>
         <Pressable
           onPress={importarJogos}
-          disabled={isImportandoJogos}
+          disabled={isImportandoJogos || isCarregandoJogos}
           style={[
             styles.botaoImportar,
-            isImportandoJogos && styles.botaoImportarDesabilitado,
+            (isImportandoJogos || isCarregandoJogos) &&
+              styles.botaoImportarDesabilitado,
           ]}
           accessibilityRole="button"
           accessibilityLabel="Importar jogos do JSON para o banco"
@@ -145,6 +173,14 @@ export default function App() {
           </Text>
         </Pressable>
       </View>
+
+      {isCarregandoJogos && (
+        <Text style={styles.statusLista}>CARREGANDO JOGOS...</Text>
+      )}
+
+      {!isCarregandoJogos && erroJogos && (
+        <Text style={styles.statusLista}>ERRO AO CARREGAR JOGOS</Text>
+      )}
 
       <FlatList
         data={jogosPorDia}
@@ -158,6 +194,11 @@ export default function App() {
           />
         )}
         contentContainerStyle={styles.lista}
+        ListEmptyComponent={
+          !isCarregandoJogos && !erroJogos ? (
+            <Text style={styles.statusLista}>NENHUM JOGO ENCONTRADO</Text>
+          ) : null
+        }
         showsVerticalScrollIndicator={false}
       />
     </ImageBackground>
@@ -225,7 +266,16 @@ const styles = StyleSheet.create({
     color: "#04120a",
   },
   lista: {
+    flexGrow: 1,
     paddingBottom: 24,
+  },
+  statusLista: {
+    width: 320,
+    marginTop: 20,
+    color: "#8fa3b8",
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
   },
   importacaoContainer: {
     width: 320,
