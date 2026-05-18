@@ -196,7 +196,9 @@ export default function App() {
         contentContainerStyle={styles.lista}
         ListEmptyComponent={
           !isCarregandoJogos && !erroJogos ? (
-            <Text style={styles.statusLista}>NENHUM JOGO ENCONTRADO</Text>
+            <View style={styles.cardVazio}>
+              <Text style={styles.cardVazioTitulo}>Nenhum jogo carregado</Text>
+            </View>
           ) : null
         }
         showsVerticalScrollIndicator={false}
@@ -274,6 +276,23 @@ const styles = StyleSheet.create({
     marginTop: 20,
     color: "#8fa3b8",
     fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  cardVazio: {
+    width: 320,
+    marginTop: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#28415b",
+    backgroundColor: "#0c1b2a",
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+    alignItems: "center",
+  },
+  cardVazioTitulo: {
+    color: "#f2cc2f",
+    fontSize: 16,
     fontWeight: "700",
     textAlign: "center",
   },
