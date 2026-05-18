@@ -1,19 +1,50 @@
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { getTeamLogo } from "../assets/teamLogos";
 import { jogoTemBrasil } from "../utils/jogos";
 
 // Renderiza as informacoes de uma partida.
-export default function GameCard({ game }) {
+export default function GameCard({ game, isFavorito, onAlternarFavorito }) {
   // Identifica se a partida envolve a selecao brasileira.
   const isBrasilGame = jogoTemBrasil(game);
 
   return (
     // Aplica destaque visual em jogos do Brasil.
-    <View style={[styles.jogo, isBrasilGame && styles.jogoBrasil]}>
+    <View
+      style={[
+        styles.jogo,
+        isBrasilGame && styles.jogoBrasil,
+        isFavorito && styles.jogoFavorito,
+      ]}
+    >
       {/* Mostra grupo/fase e confronto. */}
-      <Text style={styles.grupo}>
-        {game.grupo ? `GRUPO ${game.grupo}: ` : game.fase} {game.confronto}
-      </Text>
+      <View style={styles.cabecalho}>
+        <Text style={styles.grupo}>
+          {game.grupo ? `GRUPO ${game.grupo}: ` : game.fase} {game.confronto}
+        </Text>
+
+        <Pressable
+          onPress={() => onAlternarFavorito(game.id)}
+          style={[
+            styles.botaoFavorito,
+            isFavorito && styles.botaoFavoritoAtivo,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isFavorito
+              ? "Remover jogo dos favoritos"
+              : "Adicionar jogo aos favoritos"
+          }
+        >
+          <Text
+            style={[
+              styles.botaoFavoritoTexto,
+              isFavorito && styles.botaoFavoritoTextoAtivo,
+            ]}
+          >
+            {isFavorito ? "FAV" : "+ FAV"}
+          </Text>
+        </Pressable>
+      </View>
 
       {/* Linha principal com mandante, horario e visitante. */}
       <View style={styles.linhaPrincipal}>
@@ -77,10 +108,48 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingTop: 10,
   },
+  jogoFavorito: {
+    backgroundColor: "rgba(242, 204, 47, 0.14)",
+    borderRightWidth: 4,
+    borderRightColor: "#f2cc2f",
+    borderRadius: 8,
+    paddingTop: 10,
+  },
+  cabecalho: {
+    minHeight: 32,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 10,
+  },
   grupo: {
     color: "#8fa3b8",
     fontSize: 12,
-    marginBottom: 10,
+    flex: 1,
+    lineHeight: 16,
+  },
+  botaoFavorito: {
+    minWidth: 58,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#28415b",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  botaoFavoritoAtivo: {
+    backgroundColor: "#f2cc2f",
+    borderColor: "#f2cc2f",
+  },
+  botaoFavoritoTexto: {
+    color: "#8fa3b8",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  botaoFavoritoTextoAtivo: {
+    color: "#04120a",
   },
   linhaPrincipal: {
     flexDirection: "row",

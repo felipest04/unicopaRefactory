@@ -3,7 +3,12 @@ import GameCard from "./GameCard";
 import { isDataAtual, formatarDataBrasil } from "../utils/date";
 
 // Renderiza o agrupamento de jogos de um unico dia.
-export default function DiaCard({ data, jogos }) {
+export default function DiaCard({
+  data,
+  jogos,
+  favoritos,
+  onAlternarFavorito,
+}) {
   // Verifica se a data do card corresponde ao dia atual.
   const isHoje = isDataAtual(data);
 
@@ -21,7 +26,12 @@ export default function DiaCard({ data, jogos }) {
 
       {/* Lista todos os jogos do dia. */}
       {jogos.map((jogo) => (
-        <GameCard key={jogo.id} game={jogo} />
+        <GameCard
+          key={jogo.id}
+          game={jogo}
+          isFavorito={favoritos.has(jogo.id)}
+          onAlternarFavorito={onAlternarFavorito}
+        />
       ))}
     </View>
   );
