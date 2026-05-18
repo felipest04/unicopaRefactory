@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  View,
 } from "react-native";
 import DiaCard from "./components/DiaCard";
 import dados from "./assets/dados.json";
@@ -66,42 +67,44 @@ export default function App() {
 
       <Text style={styles.title}>CALENDARIO</Text>
 
-      <ScrollView
-        horizontal
-        style={styles.filtrosContainer}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filtros}
-      >
-        {grupos.map((grupo) => {
-          const isSelecionado = grupo === grupoSelecionado;
+      <View style={styles.filtrosContainer}>
+        <ScrollView
+          horizontal
+          style={styles.filtrosScroll}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtros}
+        >
+          {grupos.map((grupo) => {
+            const isSelecionado = grupo === grupoSelecionado;
 
-          return (
-            <Pressable
-              key={grupo}
-              onPress={() => setGrupoSelecionado(grupo)}
-              style={[
-                styles.filtroGrupo,
-                isSelecionado && styles.filtroGrupoSelecionado,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={
-                grupo === "Todos"
-                  ? "Exibir todos os grupos"
-                  : `Filtrar jogos do grupo ${grupo}`
-              }
-            >
-              <Text
+            return (
+              <Pressable
+                key={grupo}
+                onPress={() => setGrupoSelecionado(grupo)}
                 style={[
-                  styles.filtroGrupoTexto,
-                  isSelecionado && styles.filtroGrupoTextoSelecionado,
+                  styles.filtroGrupo,
+                  isSelecionado && styles.filtroGrupoSelecionado,
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  grupo === "Todos"
+                    ? "Exibir todos os grupos"
+                    : `Filtrar jogos do grupo ${grupo}`
+                }
               >
-                {grupo === "Todos" ? "TODOS" : `GRUPO ${grupo}`}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+                <Text
+                  style={[
+                    styles.filtroGrupoTexto,
+                    isSelecionado && styles.filtroGrupoTextoSelecionado,
+                  ]}
+                >
+                  {grupo === "Todos" ? "TODOS" : `GRUPO ${grupo}`}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       <FlatList
         data={jogosPorDia}
@@ -141,17 +144,25 @@ const styles = StyleSheet.create({
     color: "white",
   },
   filtrosContainer: {
-    maxHeight: 58,
+    width: 320,
+    height: 66,
+    marginTop: 12,
+    marginBottom: 2,
+  },
+  filtrosScroll: {
+    flex: 1,
+    width: "100%",
   },
   filtros: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 4,
+    minHeight: 54,
+    paddingHorizontal: 2,
+    paddingVertical: 8,
+    alignItems: "center",
     gap: 8,
   },
   filtroGrupo: {
-    height: 36,
-    minWidth: 76,
+    height: 38,
+    minWidth: 84,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#28415b",
@@ -168,6 +179,7 @@ const styles = StyleSheet.create({
     color: "#8fa3b8",
     fontSize: 12,
     fontWeight: "700",
+    lineHeight: 14,
   },
   filtroGrupoTextoSelecionado: {
     color: "#04120a",
