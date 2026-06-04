@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import DiaCard from "./components/DiaCard";
 import LoginScreen from "./components/LoginScreen";
+import RegisterScreen from "./components/RegisterScreen";
 import { agruparJogosPorData } from "./utils/jogos";
 import { importarJogosDoJson, listarJogosDoJson } from "./utils/importarJogos";
 import {
@@ -31,6 +32,10 @@ export default function App() {
   const [isVerificandoSessao, setIsVerificandoSessao] = useState(true);
   const [isEntrando, setIsEntrando] = useState(false);
   const [erroLogin, setErroLogin] = useState("");
+  const [telaAutenticacao, setTelaAutenticacao] = useState("login");
+  const [isCadastrando, setIsCadastrando] = useState(false);
+  const [erroCadastro, setErroCadastro] = useState("");
+  const [mensagemCadastro, setMensagemCadastro] = useState("");
   const filtrosScrollRef = useRef(null);
   const [filtroScrollX, setFiltroScrollX] = useState(0);
   const [filtrosLargura, setFiltrosLargura] = useState(0);
@@ -54,7 +59,7 @@ export default function App() {
     }
 
     if (mensagem.includes("Email not confirmed")) {
-      return "Confirme seu e-mail antes de entrar.";
+      return "Sua conta ainda esta aguardando confirmacao de e-mail no Supabase.";
     }
 
     if (mensagem.includes("Configuracao do Supabase ausente")) {
@@ -62,6 +67,51 @@ export default function App() {
     }
 
     return "Nao foi possivel entrar. Confira seus dados e tente novamente.";
+  };
+
+  const traduzirErroCadastro = (error) => {
+    const mensagem = error?.message || "";
+
+    if (mensagem.includes("User already registered")) {
+      return "Este e-mail ja esta cadastrado. Volte ao login para entrar.";
+    }
+
+    if (
+      mensagem.includes("Password should be at least") ||
+      mensagem.toLowerCase().includes("weak password") ||
+      error?.code === "weak_password"
+    ) {
+      return "A senha deve ter pelo menos 6 caracteres.";
+    }
+
+    if (
+      mensagem.includes("Signup is disabled") ||
+      error?.code === "signup_disabled"
+    ) {
+      return "O cadastro de novos usuarios esta desabilitado no Supabase.";
+    }
+
+    if (
+      mensagem.toLowerCase().includes("invalid email") ||
+      error?.code === "email_address_invalid"
+    ) {
+      return "Informe um e-mail valido para criar a conta.";
+    }
+
+    if (
+      mensagem.toLowerCase().includes("database error") ||
+      mensagem.toLowerCase().includes("saving new user")
+    ) {
+      return "O cadastro foi recusado por uma regra do banco no Supabase. Verifique triggers/politicas da tabela de perfil vinculada ao usuario.";
+    }
+
+    if (mensagem.includes("Configuracao do Supabase ausente")) {
+      return mensagem;
+    }
+
+    return mensagem
+      ? `Nao foi possivel criar sua conta: ${mensagem}`
+      : "Nao foi possivel criar sua conta. Confira os dados e tente novamente.";
   };
 
   useEffect(() => {
@@ -295,6 +345,51 @@ export default function App() {
     }
   };
 
+  const cadastrar = async ({ nome, email, senha }) => {
+    setIsCadastrando(true);
+    setErroCadastro("");
+    setMensagemCadastro("");
+
+    try {
+      if (!isSupabaseConfigurado()) {
+        throw new Error(
+          "Configuracao do Supabase ausente. Defina EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY no arquivo .env.local e reinicie o Expo."
+        );
+      }
+
+      const { data, error } = await getSupabaseClient().auth.signUp({
+        email,
+        password: senha,
+        options: {
+          data: nome ? { nome, name: nome, full_name: nome } : {},
+        },
+      });
+
+      if (error) {
+        console.warn("Erro ao cadastrar usuario no Supabase:", {
+          code: error.code,
+          message: error.message,
+          status: error.status,
+        });
+        setErroCadastro(traduzirErroCadastro(error));
+        return;
+      }
+
+      if (data.session) {
+        setSession(data.session);
+        return;
+      }
+
+      setMensagemCadastro(
+        "Cadastro realizado, mas o Supabase nao iniciou sessao automaticamente. Verifique se a confirmacao de e-mail esta desabilitada e volte ao login."
+      );
+    } catch (error) {
+      setErroCadastro(traduzirErroCadastro(error));
+    } finally {
+      setIsCadastrando(false);
+    }
+  };
+
   if (isVerificandoSessao) {
     return (
       <ImageBackground
@@ -308,10 +403,30 @@ export default function App() {
   }
 
   if (!session) {
+    if (telaAutenticacao === "cadastro") {
+      return (
+        <RegisterScreen
+          erroCadastro={erroCadastro}
+          isCadastrando={isCadastrando}
+          mensagemCadastro={mensagemCadastro}
+          onCadastrar={cadastrar}
+          onVoltarLogin={() => {
+            setTelaAutenticacao("login");
+            setErroCadastro("");
+            setMensagemCadastro("");
+          }}
+        />
+      );
+    }
+
     return (
       <LoginScreen
         erroLogin={erroLogin}
         isEntrando={isEntrando}
+        onAbrirCadastro={() => {
+          setTelaAutenticacao("cadastro");
+          setErroLogin("");
+        }}
         onEntrar={entrar}
       />
     );
@@ -422,7 +537,7 @@ export default function App() {
         <Text style={styles.statusLista}>CARREGANDO JOGOS...</Text>
       )}
 
-      {!isCarregandoJogos && erroJogos && (
+      {!isCarregandoJogos && Boolean(erroJogos) && (
         <Text style={styles.statusLista}>ERRO AO CARREGAR JOGOS</Text>
       )}
 
