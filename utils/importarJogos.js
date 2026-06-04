@@ -1,10 +1,10 @@
 import dados from "../assets/dados.json";
-import { supabase } from "./supabase";
+import { getSupabaseClient } from "./supabase";
 
 const TABELA_JOGOS = "jogos";
 const CAMPO_UNICO = "id";
 
-export async function importarJogosDoJson() {
+export function listarJogosDoJson() {
   const jogos = dados?.jogos;
 
   if (!Array.isArray(jogos) || jogos.length === 0) {
@@ -25,6 +25,16 @@ export async function importarJogosDoJson() {
   if (idsUnicos.size !== jogos.length) {
     throw new Error("O JSON contem jogos com ids duplicados.");
   }
+
+  return jogos.map((jogo) => ({
+    ...jogo,
+    favorito: Boolean(jogo.favorito),
+  }));
+}
+
+export async function importarJogosDoJson() {
+  const supabase = getSupabaseClient();
+  const jogos = listarJogosDoJson();
 
   const { error } = await supabase.from(TABELA_JOGOS).upsert(jogos, {
     onConflict: CAMPO_UNICO,

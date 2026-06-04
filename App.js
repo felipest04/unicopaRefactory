@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -11,12 +11,14 @@ import {
   View,
 } from "react-native";
 import DiaCard from "./components/DiaCard";
+import LoginScreen from "./components/LoginScreen";
 import { agruparJogosPorData } from "./utils/jogos";
-import { importarJogosDoJson } from "./utils/importarJogos";
+import { importarJogosDoJson, listarJogosDoJson } from "./utils/importarJogos";
 import {
   atualizarFavoritoDoJogo,
   listarJogosDoBanco,
 } from "./utils/jogosBanco";
+import { getSupabaseClient, isSupabaseConfigurado } from "./utils/supabase";
 
 export default function App() {
   const [grupoSelecionado, setGrupoSelecionado] = useState("Todos");
@@ -24,22 +26,101 @@ export default function App() {
   const [isCarregandoJogos, setIsCarregandoJogos] = useState(true);
   const [isImportandoJogos, setIsImportandoJogos] = useState(false);
   const [erroJogos, setErroJogos] = useState("");
+  const [isUsandoJogosLocais, setIsUsandoJogosLocais] = useState(false);
+  const [session, setSession] = useState(null);
+  const [isVerificandoSessao, setIsVerificandoSessao] = useState(true);
+  const [isEntrando, setIsEntrando] = useState(false);
+  const [erroLogin, setErroLogin] = useState("");
+  const filtrosScrollRef = useRef(null);
+  const [filtroScrollX, setFiltroScrollX] = useState(0);
+  const [filtrosLargura, setFiltrosLargura] = useState(0);
+  const [filtrosConteudoLargura, setFiltrosConteudoLargura] = useState(0);
+
+  const maxFiltroScrollX = Math.max(0, filtrosConteudoLargura - filtrosLargura);
+  const podeRolarFiltrosParaEsquerda = filtroScrollX > 0;
+  const podeRolarFiltrosParaDireita = filtroScrollX < maxFiltroScrollX - 1;
+
+  const normalizarJogos = (jogosParaNormalizar) =>
+    jogosParaNormalizar.map((jogo) => ({
+      ...jogo,
+      favorito: Boolean(jogo.favorito),
+    }));
+
+  const traduzirErroLogin = (error) => {
+    const mensagem = error?.message || "";
+
+    if (mensagem.includes("Invalid login credentials")) {
+      return "E-mail ou senha incorretos.";
+    }
+
+    if (mensagem.includes("Email not confirmed")) {
+      return "Confirme seu e-mail antes de entrar.";
+    }
+
+    if (mensagem.includes("Configuracao do Supabase ausente")) {
+      return mensagem;
+    }
+
+    return "Nao foi possivel entrar. Confira seus dados e tente novamente.";
+  };
+
+  useEffect(() => {
+    if (!isSupabaseConfigurado()) {
+      setIsVerificandoSessao(false);
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setSession(data.session || null);
+      })
+      .catch((error) => {
+        setErroLogin(traduzirErroLogin(error));
+      })
+      .finally(() => {
+        setIsVerificandoSessao(false);
+      });
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, novaSession) => {
+        setSession(novaSession);
+      }
+    );
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   const carregarJogos = async () => {
     setIsCarregandoJogos(true);
     setErroJogos("");
 
     try {
-      const jogosDoBanco = await listarJogosDoBanco();
-      setJogos(
-        jogosDoBanco.map((jogo) => ({
-          ...jogo,
-          favorito: Boolean(jogo.favorito),
-        }))
-      );
+      if (!isSupabaseConfigurado()) {
+        setJogos(listarJogosDoJson());
+        setIsUsandoJogosLocais(true);
+        return;
+      }
+
+      try {
+        const jogosDoBanco = await listarJogosDoBanco();
+        setJogos(normalizarJogos(jogosDoBanco));
+        setIsUsandoJogosLocais(false);
+      } catch (errorBanco) {
+        console.warn(
+          "Nao foi possivel carregar jogos do Supabase. Usando JSON local.",
+          errorBanco
+        );
+        setJogos(listarJogosDoJson());
+        setIsUsandoJogosLocais(true);
+      }
     } catch (error) {
       const mensagem =
-        error?.message || "Nao foi possivel carregar os jogos do banco.";
+        error?.message || "Nao foi possivel carregar os jogos.";
 
       setErroJogos(mensagem);
       Alert.alert("Erro ao carregar jogos", mensagem);
@@ -49,8 +130,13 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!session) {
+      setIsCarregandoJogos(false);
+      return;
+    }
+
     carregarJogos();
-  }, []);
+  }, [session]);
 
   const grupos = useMemo(
     () =>
@@ -79,6 +165,18 @@ export default function App() {
     [jogosFiltrados]
   );
 
+  const rolarFiltros = (direcao) => {
+    const proximoScrollX = Math.min(
+      Math.max(filtroScrollX + direcao * 140, 0),
+      maxFiltroScrollX
+    );
+
+    filtrosScrollRef.current?.scrollTo({
+      x: proximoScrollX,
+      animated: true,
+    });
+  };
+
   const alternarFavorito = async (jogoId) => {
     const jogoAtual = jogos.find((jogo) => jogo.id === jogoId);
 
@@ -93,6 +191,10 @@ export default function App() {
         jogo.id === jogoId ? { ...jogo, favorito: novoFavorito } : jogo
       )
     );
+
+    if (isUsandoJogosLocais || !isSupabaseConfigurado()) {
+      return;
+    }
 
     try {
       await atualizarFavoritoDoJogo(jogoId, novoFavorito);
@@ -114,6 +216,19 @@ export default function App() {
     setIsImportandoJogos(true);
 
     try {
+      if (!isSupabaseConfigurado()) {
+        const jogosDoJson = listarJogosDoJson();
+
+        setJogos(jogosDoJson);
+        setIsUsandoJogosLocais(true);
+
+        Alert.alert(
+          "Jogos carregados",
+          `${jogosDoJson.length} jogos foram carregados do JSON local. Configure o Supabase para importar para o banco.`
+        );
+        return;
+      }
+
       const resultado = await importarJogosDoJson();
 
       Alert.alert(
@@ -123,14 +238,84 @@ export default function App() {
 
       await carregarJogos();
     } catch (error) {
-      Alert.alert(
-        "Erro na importacao",
-        error?.message || "Nao foi possivel importar os jogos do JSON."
-      );
+      try {
+        const jogosDoJson = listarJogosDoJson();
+
+        setJogos(jogosDoJson);
+        setIsUsandoJogosLocais(true);
+
+        Alert.alert(
+          "Jogos carregados do JSON",
+          `${jogosDoJson.length} jogos foram carregados localmente. Nao foi possivel importar para o Supabase: ${
+            error?.message || "erro desconhecido"
+          }`
+        );
+      } catch (errorJson) {
+        Alert.alert(
+          "Erro na importacao",
+          errorJson?.message || "Nao foi possivel importar os jogos do JSON."
+        );
+      }
     } finally {
       setIsImportandoJogos(false);
     }
   };
+
+  const entrar = async (email, senha) => {
+    setIsEntrando(true);
+    setErroLogin("");
+
+    try {
+      if (!isSupabaseConfigurado()) {
+        throw new Error(
+          "Configuracao do Supabase ausente. Defina EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY no arquivo .env.local e reinicie o Expo."
+        );
+      }
+
+      const { data, error } = await getSupabaseClient().auth.signInWithPassword({
+        email,
+        password: senha,
+      });
+
+      if (error) {
+        setErroLogin(traduzirErroLogin(error));
+        return;
+      }
+
+      if (!data.session) {
+        setErroLogin("Login realizado, mas nenhuma sessao foi iniciada.");
+        return;
+      }
+
+      setSession(data.session);
+    } catch (error) {
+      setErroLogin(traduzirErroLogin(error));
+    } finally {
+      setIsEntrando(false);
+    }
+  };
+
+  if (isVerificandoSessao) {
+    return (
+      <ImageBackground
+        style={styles.container}
+        source={require("./assets/bg-overlay.png")}
+      >
+        <Image style={styles.logo} source={require("./assets/unicopa.png")} />
+        <Text style={styles.statusLista}>VERIFICANDO LOGIN...</Text>
+      </ImageBackground>
+    );
+  }
+
+  if (!session) {
+    return (
+      <LoginScreen
+        erroLogin={erroLogin}
+        isEntrando={isEntrando}
+        onEntrar={entrar}
+      />
+    );
+  }
 
   return (
     <ImageBackground
@@ -142,11 +327,32 @@ export default function App() {
       <Text style={styles.title}>CALENDARIO</Text>
 
       <View style={styles.filtrosContainer}>
+        <Pressable
+          onPress={() => rolarFiltros(-1)}
+          disabled={!podeRolarFiltrosParaEsquerda}
+          style={[
+            styles.botaoRolagemFiltro,
+            !podeRolarFiltrosParaEsquerda &&
+              styles.botaoRolagemFiltroDesabilitado,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Rolar filtros para a esquerda"
+        >
+          <Text style={styles.botaoRolagemFiltroTexto}>{"<"}</Text>
+        </Pressable>
+
         <ScrollView
+          ref={filtrosScrollRef}
           horizontal
           style={styles.filtrosScroll}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filtros}
+          onLayout={(event) => setFiltrosLargura(event.nativeEvent.layout.width)}
+          onContentSizeChange={(largura) => setFiltrosConteudoLargura(largura)}
+          onScroll={(event) =>
+            setFiltroScrollX(event.nativeEvent.contentOffset.x)
+          }
+          scrollEventThrottle={16}
         >
           {grupos.map((grupo) => {
             const isSelecionado = grupo === grupoSelecionado;
@@ -178,6 +384,20 @@ export default function App() {
             );
           })}
         </ScrollView>
+
+        <Pressable
+          onPress={() => rolarFiltros(1)}
+          disabled={!podeRolarFiltrosParaDireita}
+          style={[
+            styles.botaoRolagemFiltro,
+            !podeRolarFiltrosParaDireita &&
+              styles.botaoRolagemFiltroDesabilitado,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Rolar filtros para a direita"
+        >
+          <Text style={styles.botaoRolagemFiltroTexto}>{">"}</Text>
+        </Pressable>
       </View>
 
       <View style={styles.importacaoContainer}>
@@ -254,10 +474,31 @@ const styles = StyleSheet.create({
     height: 66,
     marginTop: 12,
     marginBottom: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  botaoRolagemFiltro: {
+    width: 32,
+    height: 38,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#f2cc2f",
+    backgroundColor: "#102817",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  botaoRolagemFiltroDesabilitado: {
+    opacity: 0.35,
+  },
+  botaoRolagemFiltroTexto: {
+    color: "#f2cc2f",
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 20,
   },
   filtrosScroll: {
     flex: 1,
-    width: "100%",
   },
   filtros: {
     minHeight: 54,
