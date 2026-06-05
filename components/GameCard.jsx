@@ -2,6 +2,7 @@ import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 import { getTeamLogo } from "../assets/teamLogos";
 import { jogoTemBrasil } from "../utils/jogos";
 import { isPalpiteBloqueado } from "../utils/date";
+import { isPalpiteConfirmado } from "../utils/palpites";
 
 // Renderiza as informações de uma partida.
 export default function GameCard({
@@ -17,7 +18,8 @@ export default function GameCard({
   // Identifica se a partida envolve a seleção brasileira.
   const isBrasilGame = jogoTemBrasil(game);
   const isBloqueado = isPalpiteBloqueado(game);
-  const isCampoPalpiteEditavel = !isSalvandoPalpite;
+  const isConfirmado = isPalpiteConfirmado(palpite.status_envio);
+  const isCampoPalpiteEditavel = !isSalvandoPalpite && !isBloqueado;
   const isPalpiteSalvavel = isPalpitesDisponiveis && !isBloqueado;
   const isSalvarDesabilitado =
     !isPalpiteSalvavel ||
@@ -93,7 +95,12 @@ export default function GameCard({
       </View>
 
       <View style={styles.palpiteContainer}>
-        <Text style={styles.palpiteTitulo}>PALPITE</Text>
+        <View style={styles.palpiteCabecalho}>
+          <Text style={styles.palpiteTitulo}>PALPITE</Text>
+          {isConfirmado && (
+            <Text style={styles.palpiteConfirmado}>CONFIRMADO</Text>
+          )}
+        </View>
 
         <View style={styles.palpiteLinha}>
           <TextInput
@@ -156,7 +163,7 @@ export default function GameCard({
 
         {isPalpitesDisponiveis && isBloqueado && (
           <Text style={styles.palpiteStatus}>
-            Salvamento bloqueado após o início do jogo.
+            Edição bloqueada após o início do jogo.
           </Text>
         )}
       </View>
@@ -302,7 +309,19 @@ const styles = StyleSheet.create({
     color: "#f2cc2f",
     fontSize: 11,
     fontWeight: "700",
+  },
+  palpiteCabecalho: {
+    minHeight: 18,
     marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  palpiteConfirmado: {
+    color: "#32d16d",
+    fontSize: 10,
+    fontWeight: "700",
   },
   palpiteLinha: {
     minHeight: 38,

@@ -4,6 +4,7 @@ import {
   FlatList,
   Image,
   ImageBackground,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,9 +21,15 @@ import {
   listarJogosDoBanco,
 } from "./utils/jogosBanco";
 import {
+  confirmarPalpitesDoUsuario,
   listarPalpitesDoUsuario,
   salvarPalpiteDoJogo,
 } from "./utils/palpitesBanco";
+import {
+  isPalpiteConfirmado,
+  STATUS_ENVIO_PALPITE_CONFIRMADO,
+  STATUS_ENVIO_PALPITE_RASCUNHO,
+} from "./utils/palpites";
 import { getSupabaseClient, isSupabaseConfigurado } from "./utils/supabase";
 import { isPalpiteBloqueado } from "./utils/date";
 
@@ -43,6 +50,9 @@ export default function App() {
   const [mensagemCadastro, setMensagemCadastro] = useState("");
   const [palpitesPorJogo, setPalpitesPorJogo] = useState({});
   const [palpitesSalvandoPorJogo, setPalpitesSalvandoPorJogo] = useState({});
+  const [isRevisaoPalpitesVisivel, setIsRevisaoPalpitesVisivel] =
+    useState(false);
+  const [isConfirmandoPalpites, setIsConfirmandoPalpites] = useState(false);
   const filtrosScrollRef = useRef(null);
   const [filtroScrollX, setFiltroScrollX] = useState(0);
   const [filtrosLargura, setFiltrosLargura] = useState(0);
@@ -61,11 +71,16 @@ export default function App() {
   const normalizarPalpites = (palpitesParaNormalizar) =>
     palpitesParaNormalizar.reduce((acc, palpite) => {
       const jogoId = palpite.id_jogo ?? palpite.jogo_id;
+      const golsCasa = palpite.placar_time_casa ?? palpite.gols_casa ?? "";
+      const golsFora = palpite.placar_time_fora ?? palpite.gols_fora ?? "";
 
       acc[jogoId] = {
         id: palpite.id,
-        gols_casa: String(palpite.placar_time_casa ?? palpite.gols_casa),
-        gols_fora: String(palpite.placar_time_fora ?? palpite.gols_fora),
+        gols_casa: String(golsCasa),
+        gols_fora: String(golsFora),
+        situacao: palpite.situacao,
+        status_envio:
+          palpite.status_envio || STATUS_ENVIO_PALPITE_RASCUNHO,
       };
 
       return acc;
@@ -251,6 +266,39 @@ export default function App() {
     [jogosFiltrados]
   );
 
+  const palpitesPreenchidos = useMemo(
+    () =>
+      jogos
+        .map((jogo) => {
+          const palpite = palpitesPorJogo[jogo.id] || {};
+          const golsCasa = Number.parseInt(palpite.gols_casa, 10);
+          const golsFora = Number.parseInt(palpite.gols_fora, 10);
+
+          if (Number.isNaN(golsCasa) || Number.isNaN(golsFora)) {
+            return null;
+          }
+
+          return {
+            jogo,
+            jogoId: jogo.id,
+            golsCasa,
+            golsFora,
+            status_envio:
+              palpite.status_envio || STATUS_ENVIO_PALPITE_RASCUNHO,
+          };
+        })
+        .filter(Boolean),
+    [jogos, palpitesPorJogo]
+  );
+
+  const quantidadePalpitesConfirmados = useMemo(
+    () =>
+      palpitesPreenchidos.filter(
+        (palpite) => isPalpiteConfirmado(palpite.status_envio)
+      ).length,
+    [palpitesPreenchidos]
+  );
+
   const rolarFiltros = (direcao) => {
     const proximoScrollX = Math.min(
       Math.max(filtroScrollX + direcao * 140, 0),
@@ -357,6 +405,7 @@ export default function App() {
         gols_fora: "",
         ...palpitesAtuais[jogoId],
         [campo]: valorNumerico,
+        status_envio: STATUS_ENVIO_PALPITE_RASCUNHO,
       },
     }));
   };
@@ -411,6 +460,8 @@ export default function App() {
     const palpite = palpitesPorJogo[jogo.id] || {};
     const golsCasa = Number.parseInt(palpite.gols_casa, 10);
     const golsFora = Number.parseInt(palpite.gols_fora, 10);
+    const statusEnvio =
+      palpite.status_envio || STATUS_ENVIO_PALPITE_RASCUNHO;
 
     if (Number.isNaN(golsCasa) || Number.isNaN(golsFora)) {
       Alert.alert(
@@ -431,6 +482,7 @@ export default function App() {
         jogoId: jogo.id,
         golsCasa,
         golsFora,
+        statusEnvio,
       });
 
       setPalpitesPorJogo((palpitesAtuais) => ({
@@ -443,6 +495,9 @@ export default function App() {
           gols_fora: String(
             palpiteSalvo.placar_time_fora ?? palpiteSalvo.gols_fora
           ),
+          situacao: palpiteSalvo.situacao,
+          status_envio:
+            palpiteSalvo.status_envio || STATUS_ENVIO_PALPITE_RASCUNHO,
         },
       }));
 
@@ -454,6 +509,64 @@ export default function App() {
         ...palpitesAtuais,
         [jogo.id]: false,
       }));
+    }
+  };
+
+  const abrirRevisaoPalpites = () => {
+    if (!session?.user?.id) {
+      Alert.alert("Login necessário", "Entre novamente para confirmar palpites.");
+      return;
+    }
+
+    if (!isSupabaseConfigurado()) {
+      Alert.alert(
+        "Confirmação indisponível",
+        "Os palpites só podem ser confirmados com o Supabase configurado."
+      );
+      return;
+    }
+
+    if (palpitesPreenchidos.length === 0) {
+      Alert.alert(
+        "Nenhum palpite preenchido",
+        "Preencha ao menos um placar antes de revisar."
+      );
+      return;
+    }
+
+    setIsRevisaoPalpitesVisivel(true);
+  };
+
+  const confirmarEnvioPalpites = async () => {
+    setIsConfirmandoPalpites(true);
+
+    try {
+      await confirmarPalpitesDoUsuario(
+        session.user,
+        palpitesPreenchidos
+      );
+
+      setPalpitesPorJogo((palpitesAtuais) => {
+        const proximosPalpites = { ...palpitesAtuais };
+
+        palpitesPreenchidos.forEach((palpite) => {
+          proximosPalpites[palpite.jogoId] = {
+            ...proximosPalpites[palpite.jogoId],
+            gols_casa: String(palpite.golsCasa),
+            gols_fora: String(palpite.golsFora),
+            status_envio: STATUS_ENVIO_PALPITE_CONFIRMADO,
+          };
+        });
+
+        return proximosPalpites;
+      });
+
+      setIsRevisaoPalpitesVisivel(false);
+      Alert.alert("Palpites confirmados", "Seus palpites foram enviados.");
+    } catch (error) {
+      Alert.alert("Erro ao confirmar palpites", traduzirErroPalpite(error));
+    } finally {
+      setIsConfirmandoPalpites(false);
     }
   };
 
@@ -679,6 +792,121 @@ export default function App() {
         </Pressable>
       </View>
 
+      <View style={styles.confirmacaoContainer}>
+        <Pressable
+          onPress={abrirRevisaoPalpites}
+          disabled={isConfirmandoPalpites || palpitesPreenchidos.length === 0}
+          style={[
+            styles.botaoConfirmarPalpites,
+            (isConfirmandoPalpites || palpitesPreenchidos.length === 0) &&
+              styles.botaoConfirmarPalpitesDesabilitado,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Revisar e confirmar palpites"
+        >
+          <Text style={styles.botaoConfirmarPalpitesTexto}>
+            {isConfirmandoPalpites ? "ENVIANDO..." : "REVISAR PALPITES"}
+          </Text>
+        </Pressable>
+
+        <Text style={styles.resumoPalpites}>
+          {palpitesPreenchidos.length} preenchidos ·{" "}
+          {quantidadePalpitesConfirmados} confirmados
+        </Text>
+      </View>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={isRevisaoPalpitesVisivel}
+        onRequestClose={() => {
+          if (!isConfirmandoPalpites) {
+            setIsRevisaoPalpitesVisivel(false);
+          }
+        }}
+      >
+        <View style={styles.modalFundo}>
+          <View style={styles.modalRevisao}>
+            <View style={styles.modalCabecalho}>
+              <Text style={styles.modalTitulo}>REVISÃO</Text>
+              <Pressable
+                onPress={() => setIsRevisaoPalpitesVisivel(false)}
+                disabled={isConfirmandoPalpites}
+                style={[
+                  styles.botaoFecharModal,
+                  isConfirmandoPalpites && styles.botaoFecharModalDesabilitado,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Fechar revisão de palpites"
+              >
+                <Text style={styles.botaoFecharModalTexto}>X</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.listaRevisao}
+              contentContainerStyle={styles.listaRevisaoConteudo}
+              showsVerticalScrollIndicator={false}
+            >
+              {palpitesPreenchidos.map((palpite) => (
+                <View key={palpite.jogoId} style={styles.itemRevisao}>
+                  <View style={styles.itemRevisaoTimes}>
+                    <Text style={styles.itemRevisaoConfronto}>
+                      {palpite.jogo.sigla_casa} x {palpite.jogo.sigla_fora}
+                    </Text>
+                    <Text style={styles.itemRevisaoDetalhe}>
+                      {palpite.jogo.data_brasilia} · {palpite.jogo.hora_brasilia}
+                    </Text>
+                  </View>
+
+                  <View style={styles.itemRevisaoPlacar}>
+                    <Text style={styles.itemRevisaoPlacarTexto}>
+                      {palpite.golsCasa} x {palpite.golsFora}
+                    </Text>
+                    <Text style={styles.itemRevisaoSituacao}>
+                      {isPalpiteConfirmado(palpite.status_envio)
+                        ? "CONFIRMADO"
+                        : "RASCUNHO"}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={styles.modalAcoes}>
+              <Pressable
+                onPress={() => setIsRevisaoPalpitesVisivel(false)}
+                disabled={isConfirmandoPalpites}
+                style={[
+                  styles.botaoCancelarRevisao,
+                  isConfirmandoPalpites &&
+                    styles.botaoCancelarRevisaoDesabilitado,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Cancelar revisão de palpites"
+              >
+                <Text style={styles.botaoCancelarRevisaoTexto}>CANCELAR</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={confirmarEnvioPalpites}
+                disabled={isConfirmandoPalpites}
+                style={[
+                  styles.botaoEnviarPalpites,
+                  isConfirmandoPalpites && styles.botaoEnviarPalpitesDesabilitado,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Confirmar envio dos palpites"
+              >
+                <Text style={styles.botaoEnviarPalpitesTexto}>
+                  {isConfirmandoPalpites ? "ENVIANDO..." : "CONFIRMAR"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {isCarregandoJogos && (
         <Text style={styles.statusLista}>CARREGANDO JOGOS...</Text>
       )}
@@ -844,6 +1072,171 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   botaoImportarTexto: {
+    color: "#04120a",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  confirmacaoContainer: {
+    width: 320,
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  botaoConfirmarPalpites: {
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: "#f2cc2f",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  botaoConfirmarPalpitesDesabilitado: {
+    opacity: 0.45,
+  },
+  botaoConfirmarPalpitesTexto: {
+    color: "#04120a",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  resumoPalpites: {
+    marginTop: 6,
+    color: "#8fa3b8",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  modalFundo: {
+    flex: 1,
+    backgroundColor: "rgba(4, 11, 19, 0.86)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+  modalRevisao: {
+    width: "100%",
+    maxWidth: 420,
+    maxHeight: "82%",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#28415b",
+    backgroundColor: "#0c1b2a",
+    padding: 14,
+  },
+  modalCabecalho: {
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  modalTitulo: {
+    color: "#f2cc2f",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  botaoFecharModal: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#28415b",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  botaoFecharModalDesabilitado: {
+    opacity: 0.45,
+  },
+  botaoFecharModalTexto: {
+    color: "#8fa3b8",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  listaRevisao: {
+    maxHeight: 360,
+  },
+  listaRevisaoConteudo: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  itemRevisao: {
+    minHeight: 58,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1e2d3d",
+    backgroundColor: "#07131f",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  itemRevisaoTimes: {
+    flex: 1,
+    minWidth: 0,
+  },
+  itemRevisaoConfronto: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  itemRevisaoDetalhe: {
+    marginTop: 3,
+    color: "#8fa3b8",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  itemRevisaoPlacar: {
+    minWidth: 86,
+    alignItems: "flex-end",
+  },
+  itemRevisaoPlacarTexto: {
+    color: "#f2cc2f",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  itemRevisaoSituacao: {
+    marginTop: 3,
+    color: "#32d16d",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  modalAcoes: {
+    minHeight: 40,
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  botaoCancelarRevisao: {
+    flex: 1,
+    height: 38,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#28415b",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  botaoCancelarRevisaoDesabilitado: {
+    opacity: 0.45,
+  },
+  botaoCancelarRevisaoTexto: {
+    color: "#8fa3b8",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  botaoEnviarPalpites: {
+    flex: 1,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: "#32d16d",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  botaoEnviarPalpitesDesabilitado: {
+    opacity: 0.55,
+  },
+  botaoEnviarPalpitesTexto: {
     color: "#04120a",
     fontSize: 12,
     fontWeight: "700",
