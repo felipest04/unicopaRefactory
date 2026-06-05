@@ -16,14 +16,14 @@ export function listarJogosDoJson() {
   );
 
   if (jogoSemId) {
-    throw new Error("Todos os jogos precisam ter um id para evitar duplicidade.");
+    throw new Error("Todos os jogos precisam ter um ID para evitar duplicidade.");
   }
 
   const ids = jogos.map((jogo) => jogo[CAMPO_UNICO]);
   const idsUnicos = new Set(ids);
 
   if (idsUnicos.size !== jogos.length) {
-    throw new Error("O JSON contem jogos com ids duplicados.");
+    throw new Error("O JSON contém jogos com IDs duplicados.");
   }
 
   return jogos.map((jogo) => ({

@@ -19,7 +19,12 @@ import {
   atualizarFavoritoDoJogo,
   listarJogosDoBanco,
 } from "./utils/jogosBanco";
+import {
+  listarPalpitesDoUsuario,
+  salvarPalpiteDoJogo,
+} from "./utils/palpitesBanco";
 import { getSupabaseClient, isSupabaseConfigurado } from "./utils/supabase";
+import { isPalpiteBloqueado } from "./utils/date";
 
 export default function App() {
   const [grupoSelecionado, setGrupoSelecionado] = useState("Todos");
@@ -36,6 +41,8 @@ export default function App() {
   const [isCadastrando, setIsCadastrando] = useState(false);
   const [erroCadastro, setErroCadastro] = useState("");
   const [mensagemCadastro, setMensagemCadastro] = useState("");
+  const [palpitesPorJogo, setPalpitesPorJogo] = useState({});
+  const [palpitesSalvandoPorJogo, setPalpitesSalvandoPorJogo] = useState({});
   const filtrosScrollRef = useRef(null);
   const [filtroScrollX, setFiltroScrollX] = useState(0);
   const [filtrosLargura, setFiltrosLargura] = useState(0);
@@ -51,6 +58,19 @@ export default function App() {
       favorito: Boolean(jogo.favorito),
     }));
 
+  const normalizarPalpites = (palpitesParaNormalizar) =>
+    palpitesParaNormalizar.reduce((acc, palpite) => {
+      const jogoId = palpite.id_jogo ?? palpite.jogo_id;
+
+      acc[jogoId] = {
+        id: palpite.id,
+        gols_casa: String(palpite.placar_time_casa ?? palpite.gols_casa),
+        gols_fora: String(palpite.placar_time_fora ?? palpite.gols_fora),
+      };
+
+      return acc;
+    }, {});
+
   const traduzirErroLogin = (error) => {
     const mensagem = error?.message || "";
 
@@ -59,21 +79,21 @@ export default function App() {
     }
 
     if (mensagem.includes("Email not confirmed")) {
-      return "Sua conta ainda esta aguardando confirmacao de e-mail no Supabase.";
+      return "Sua conta ainda está aguardando confirmação de e-mail no Supabase.";
     }
 
-    if (mensagem.includes("Configuracao do Supabase ausente")) {
+    if (mensagem.includes("Configuração do Supabase ausente")) {
       return mensagem;
     }
 
-    return "Nao foi possivel entrar. Confira seus dados e tente novamente.";
+    return "Não foi possível entrar. Confira seus dados e tente novamente.";
   };
 
   const traduzirErroCadastro = (error) => {
     const mensagem = error?.message || "";
 
     if (mensagem.includes("User already registered")) {
-      return "Este e-mail ja esta cadastrado. Volte ao login para entrar.";
+      return "Este e-mail já está cadastrado. Volte ao login para entrar.";
     }
 
     if (
@@ -88,30 +108,30 @@ export default function App() {
       mensagem.includes("Signup is disabled") ||
       error?.code === "signup_disabled"
     ) {
-      return "O cadastro de novos usuarios esta desabilitado no Supabase.";
+      return "O cadastro de novos usuários está desabilitado no Supabase.";
     }
 
     if (
       mensagem.toLowerCase().includes("invalid email") ||
       error?.code === "email_address_invalid"
     ) {
-      return "Informe um e-mail valido para criar a conta.";
+      return "Informe um e-mail válido para criar a conta.";
     }
 
     if (
       mensagem.toLowerCase().includes("database error") ||
       mensagem.toLowerCase().includes("saving new user")
     ) {
-      return "O cadastro foi recusado por uma regra do banco no Supabase. Verifique triggers/politicas da tabela de perfil vinculada ao usuario.";
+      return "O cadastro foi recusado por uma regra do banco no Supabase. Verifique os gatilhos (triggers) ou as políticas da tabela de perfil vinculada ao usuário.";
     }
 
-    if (mensagem.includes("Configuracao do Supabase ausente")) {
+    if (mensagem.includes("Configuração do Supabase ausente")) {
       return mensagem;
     }
 
     return mensagem
-      ? `Nao foi possivel criar sua conta: ${mensagem}`
-      : "Nao foi possivel criar sua conta. Confira os dados e tente novamente.";
+      ? `Não foi possível criar sua conta: ${mensagem}`
+      : "Não foi possível criar sua conta. Confira os dados e tente novamente.";
   };
 
   useEffect(() => {
@@ -158,19 +178,35 @@ export default function App() {
 
       try {
         const jogosDoBanco = await listarJogosDoBanco();
+
         setJogos(normalizarJogos(jogosDoBanco));
         setIsUsandoJogosLocais(false);
+
+        try {
+          const palpitesDoUsuario = await listarPalpitesDoUsuario(
+            session.user
+          );
+
+          setPalpitesPorJogo(normalizarPalpites(palpitesDoUsuario));
+        } catch (errorPalpites) {
+          console.warn(
+            "Não foi possível carregar palpites do Supabase.",
+            errorPalpites
+          );
+          setPalpitesPorJogo({});
+        }
       } catch (errorBanco) {
         console.warn(
-          "Nao foi possivel carregar jogos do Supabase. Usando JSON local.",
+          "Não foi possível carregar jogos do Supabase. Usando JSON local.",
           errorBanco
         );
         setJogos(listarJogosDoJson());
+        setPalpitesPorJogo({});
         setIsUsandoJogosLocais(true);
       }
     } catch (error) {
       const mensagem =
-        error?.message || "Nao foi possivel carregar os jogos.";
+        error?.message || "Não foi possível carregar os jogos.";
 
       setErroJogos(mensagem);
       Alert.alert("Erro ao carregar jogos", mensagem);
@@ -257,7 +293,7 @@ export default function App() {
 
       Alert.alert(
         "Erro ao atualizar favorito",
-        error?.message || "Nao foi possivel salvar o favorito no banco."
+        error?.message || "Não foi possível salvar o favorito no banco."
       );
     }
   };
@@ -282,7 +318,7 @@ export default function App() {
       const resultado = await importarJogosDoJson();
 
       Alert.alert(
-        "Importacao concluida",
+        "Importação concluída",
         `${resultado.total} jogos foram processados na tabela ${resultado.tabela} usando ${resultado.campoUnico} para evitar duplicidade.`
       );
 
@@ -296,18 +332,128 @@ export default function App() {
 
         Alert.alert(
           "Jogos carregados do JSON",
-          `${jogosDoJson.length} jogos foram carregados localmente. Nao foi possivel importar para o Supabase: ${
+          `${jogosDoJson.length} jogos foram carregados localmente. Não foi possível importar para o Supabase: ${
             error?.message || "erro desconhecido"
           }`
         );
       } catch (errorJson) {
         Alert.alert(
-          "Erro na importacao",
-          errorJson?.message || "Nao foi possivel importar os jogos do JSON."
+          "Erro na importação",
+          errorJson?.message || "Não foi possível importar os jogos do JSON."
         );
       }
     } finally {
       setIsImportandoJogos(false);
+    }
+  };
+
+  const alterarPalpite = (jogoId, campo, valor) => {
+    const valorNumerico = valor.replace(/\D/g, "").slice(0, 2);
+
+    setPalpitesPorJogo((palpitesAtuais) => ({
+      ...palpitesAtuais,
+      [jogoId]: {
+        gols_casa: "",
+        gols_fora: "",
+        ...palpitesAtuais[jogoId],
+        [campo]: valorNumerico,
+      },
+    }));
+  };
+
+  const traduzirErroPalpite = (error) => {
+    const mensagem = error?.message || "";
+    const mensagemMinuscula = mensagem.toLowerCase();
+
+    if (
+      mensagemMinuscula.includes("duplicate") ||
+      mensagemMinuscula.includes("unique")
+    ) {
+      return "Existe mais de um palpite para este usuário e este jogo. Verifique a restrição única id_usuario+id_jogo no Supabase.";
+    }
+
+    if (
+      mensagemMinuscula.includes("row-level security") ||
+      mensagemMinuscula.includes("permission denied")
+    ) {
+      return "Sem permissão para salvar o palpite. Verifique as políticas RLS da tabela palpites para usuários autenticados.";
+    }
+
+    if (mensagemMinuscula.includes("column")) {
+      return `A estrutura da tabela palpites está diferente do esperado: ${mensagem}`;
+    }
+
+    return mensagem || "Não foi possível salvar o palpite.";
+  };
+
+  const salvarPalpite = async (jogo) => {
+    if (!session?.user?.id) {
+      Alert.alert("Login necessário", "Entre novamente para salvar palpites.");
+      return;
+    }
+
+    if (!isSupabaseConfigurado()) {
+      Alert.alert(
+        "Palpite indisponível",
+        "Os palpites só podem ser salvos com o Supabase configurado."
+      );
+      return;
+    }
+
+    if (isPalpiteBloqueado(jogo)) {
+      Alert.alert(
+        "Palpite bloqueado",
+        "Não é possível editar o palpite depois do horário do jogo."
+      );
+      return;
+    }
+
+    const palpite = palpitesPorJogo[jogo.id] || {};
+    const golsCasa = Number.parseInt(palpite.gols_casa, 10);
+    const golsFora = Number.parseInt(palpite.gols_fora, 10);
+
+    if (Number.isNaN(golsCasa) || Number.isNaN(golsFora)) {
+      Alert.alert(
+        "Palpite incompleto",
+        "Informe os gols dos dois times antes de salvar."
+      );
+      return;
+    }
+
+    setPalpitesSalvandoPorJogo((palpitesAtuais) => ({
+      ...palpitesAtuais,
+      [jogo.id]: true,
+    }));
+
+    try {
+      const palpiteSalvo = await salvarPalpiteDoJogo({
+        authUser: session.user,
+        jogoId: jogo.id,
+        golsCasa,
+        golsFora,
+      });
+
+      setPalpitesPorJogo((palpitesAtuais) => ({
+        ...palpitesAtuais,
+        [jogo.id]: {
+          id: palpiteSalvo.id,
+          gols_casa: String(
+            palpiteSalvo.placar_time_casa ?? palpiteSalvo.gols_casa
+          ),
+          gols_fora: String(
+            palpiteSalvo.placar_time_fora ?? palpiteSalvo.gols_fora
+          ),
+        },
+      }));
+
+      Alert.alert("Palpite salvo", "Seu palpite foi registrado.");
+    } catch (error) {
+      Alert.alert("Erro ao salvar palpite", traduzirErroPalpite(error));
+    } finally {
+      setPalpitesSalvandoPorJogo((palpitesAtuais) => ({
+        ...palpitesAtuais,
+        [jogo.id]: false,
+      }));
     }
   };
 
@@ -318,7 +464,7 @@ export default function App() {
     try {
       if (!isSupabaseConfigurado()) {
         throw new Error(
-          "Configuracao do Supabase ausente. Defina EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY no arquivo .env.local e reinicie o Expo."
+          "Configuração do Supabase ausente. Defina EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY no arquivo .env.local e reinicie o Expo."
         );
       }
 
@@ -333,7 +479,7 @@ export default function App() {
       }
 
       if (!data.session) {
-        setErroLogin("Login realizado, mas nenhuma sessao foi iniciada.");
+        setErroLogin("Login realizado, mas nenhuma sessão foi iniciada.");
         return;
       }
 
@@ -353,7 +499,7 @@ export default function App() {
     try {
       if (!isSupabaseConfigurado()) {
         throw new Error(
-          "Configuracao do Supabase ausente. Defina EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY no arquivo .env.local e reinicie o Expo."
+          "Configuração do Supabase ausente. Defina EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY no arquivo .env.local e reinicie o Expo."
         );
       }
 
@@ -366,7 +512,7 @@ export default function App() {
       });
 
       if (error) {
-        console.warn("Erro ao cadastrar usuario no Supabase:", {
+        console.warn("Erro ao cadastrar usuário no Supabase:", {
           code: error.code,
           message: error.message,
           status: error.status,
@@ -381,7 +527,7 @@ export default function App() {
       }
 
       setMensagemCadastro(
-        "Cadastro realizado, mas o Supabase nao iniciou sessao automaticamente. Verifique se a confirmacao de e-mail esta desabilitada e volte ao login."
+        "Cadastro realizado, mas o Supabase não iniciou uma sessão automaticamente. Verifique se a confirmação de e-mail está desabilitada e volte ao login."
       );
     } catch (error) {
       setErroCadastro(traduzirErroCadastro(error));
@@ -439,7 +585,7 @@ export default function App() {
     >
       <Image style={styles.logo} source={require("./assets/unicopa.png")} />
 
-      <Text style={styles.title}>CALENDARIO</Text>
+      <Text style={styles.title}>CALENDÁRIO</Text>
 
       <View style={styles.filtrosContainer}>
         <Pressable
@@ -548,7 +694,14 @@ export default function App() {
           <DiaCard
             data={item.data}
             jogos={item.jogos}
+            isPalpitesDisponiveis={
+              Boolean(session?.user?.id) && isSupabaseConfigurado()
+            }
             onAlternarFavorito={alternarFavorito}
+            onAlterarPalpite={alterarPalpite}
+            onSalvarPalpite={salvarPalpite}
+            palpitesPorJogo={palpitesPorJogo}
+            palpitesSalvandoPorJogo={palpitesSalvandoPorJogo}
           />
         )}
         contentContainerStyle={styles.lista}

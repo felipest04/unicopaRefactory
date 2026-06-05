@@ -2,11 +2,16 @@ import { StyleSheet, Text, View } from "react-native";
 import GameCard from "./GameCard";
 import { isDataAtual, formatarDataBrasil } from "../utils/date";
 
-// Renderiza o agrupamento de jogos de um unico dia.
+// Renderiza o agrupamento de jogos de um único dia.
 export default function DiaCard({
   data,
   jogos,
+  isPalpitesDisponiveis,
   onAlternarFavorito,
+  onAlterarPalpite,
+  onSalvarPalpite,
+  palpitesPorJogo,
+  palpitesSalvandoPorJogo,
 }) {
   // Verifica se a data do card corresponde ao dia atual.
   const isHoje = isDataAtual(data);
@@ -14,7 +19,7 @@ export default function DiaCard({
   return (
     // Aplica destaque visual quando o card representa o dia atual.
     <View style={[styles.card, isHoje && styles.cardHoje]}>
-      {/* Cabecalho com data formatada e badge opcional de hoje. */}
+      {/* Cabeçalho com data formatada e badge opcional de hoje. */}
       <View style={styles.cabecalho}>
         <Text style={[styles.data, isHoje && styles.dataHoje]}>
           {formatarDataBrasil(data)}
@@ -29,7 +34,12 @@ export default function DiaCard({
           key={jogo.id}
           game={jogo}
           isFavorito={Boolean(jogo.favorito)}
+          isPalpitesDisponiveis={isPalpitesDisponiveis}
           onAlternarFavorito={onAlternarFavorito}
+          onAlterarPalpite={onAlterarPalpite}
+          onSalvarPalpite={onSalvarPalpite}
+          palpite={palpitesPorJogo[jogo.id]}
+          isSalvandoPalpite={Boolean(palpitesSalvandoPorJogo[jogo.id])}
         />
       ))}
     </View>

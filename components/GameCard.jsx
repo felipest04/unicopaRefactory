@@ -1,11 +1,31 @@
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { getTeamLogo } from "../assets/teamLogos";
 import { jogoTemBrasil } from "../utils/jogos";
+import { isPalpiteBloqueado } from "../utils/date";
 
-// Renderiza as informacoes de uma partida.
-export default function GameCard({ game, isFavorito, onAlternarFavorito }) {
-  // Identifica se a partida envolve a selecao brasileira.
+// Renderiza as informações de uma partida.
+export default function GameCard({
+  game,
+  isFavorito,
+  isPalpitesDisponiveis,
+  isSalvandoPalpite,
+  onAlternarFavorito,
+  onAlterarPalpite,
+  onSalvarPalpite,
+  palpite = {},
+}) {
+  // Identifica se a partida envolve a seleção brasileira.
   const isBrasilGame = jogoTemBrasil(game);
+  const isBloqueado = isPalpiteBloqueado(game);
+  const isCampoPalpiteEditavel = !isSalvandoPalpite;
+  const isPalpiteSalvavel = isPalpitesDisponiveis && !isBloqueado;
+  const isSalvarDesabilitado =
+    !isPalpiteSalvavel ||
+    isSalvandoPalpite ||
+    palpite.gols_casa === "" ||
+    palpite.gols_casa === undefined ||
+    palpite.gols_fora === "" ||
+    palpite.gols_fora === undefined;
 
   return (
     // Aplica destaque visual em jogos do Brasil.
@@ -46,7 +66,7 @@ export default function GameCard({ game, isFavorito, onAlternarFavorito }) {
         </Pressable>
       </View>
 
-      {/* Linha principal com mandante, horario e visitante. */}
+      {/* Linha principal com mandante, horário e visitante. */}
       <View style={styles.linhaPrincipal}>
         <View style={styles.time}>
           <TeamLogo sigla={game.sigla_casa} />
@@ -64,24 +84,93 @@ export default function GameCard({ game, isFavorito, onAlternarFavorito }) {
         </View>
       </View>
 
-      {/* Informacoes do estadio e local da partida. */}
+      {/* Informações do estádio e local da partida. */}
       <View style={styles.local}>
         <Text style={styles.subTitulo}>{game.estadio}</Text>
         <Text style={styles.subTitulo}>
           {game.cidade} - {game.pais}
         </Text>
       </View>
+
+      <View style={styles.palpiteContainer}>
+        <Text style={styles.palpiteTitulo}>PALPITE</Text>
+
+        <View style={styles.palpiteLinha}>
+          <TextInput
+            value={palpite.gols_casa ?? ""}
+            onChangeText={(valor) =>
+              onAlterarPalpite(game.id, "gols_casa", valor)
+            }
+            editable={isCampoPalpiteEditavel}
+            keyboardType="number-pad"
+            maxLength={2}
+            placeholder="0"
+            placeholderTextColor="#5f7488"
+            style={[
+              styles.palpiteInput,
+              !isCampoPalpiteEditavel && styles.palpiteInputDesabilitado,
+            ]}
+            accessibilityLabel={`Gols ${game.sigla_casa}`}
+          />
+
+          <Text style={styles.palpiteSeparador}>x</Text>
+
+          <TextInput
+            value={palpite.gols_fora ?? ""}
+            onChangeText={(valor) =>
+              onAlterarPalpite(game.id, "gols_fora", valor)
+            }
+            editable={isCampoPalpiteEditavel}
+            keyboardType="number-pad"
+            maxLength={2}
+            placeholder="0"
+            placeholderTextColor="#5f7488"
+            style={[
+              styles.palpiteInput,
+              !isCampoPalpiteEditavel && styles.palpiteInputDesabilitado,
+            ]}
+            accessibilityLabel={`Gols ${game.sigla_fora}`}
+          />
+
+          <Pressable
+            onPress={() => onSalvarPalpite(game)}
+            disabled={isSalvarDesabilitado}
+            style={[
+              styles.botaoSalvarPalpite,
+              isSalvarDesabilitado && styles.botaoSalvarPalpiteDesabilitado,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Salvar palpite do jogo"
+          >
+            <Text style={styles.botaoSalvarPalpiteTexto}>
+              {isSalvandoPalpite ? "..." : "SALVAR"}
+            </Text>
+          </Pressable>
+        </View>
+
+        {!isPalpitesDisponiveis && (
+          <Text style={styles.palpiteStatus}>
+            Salvamento disponível somente para usuários autenticados com Supabase configurado.
+          </Text>
+        )}
+
+        {isPalpitesDisponiveis && isBloqueado && (
+          <Text style={styles.palpiteStatus}>
+            Salvamento bloqueado após o início do jogo.
+          </Text>
+        )}
+      </View>
     </View>
   );
 }
 
-// Exibe a bandeira da selecao ou um marcador quando nao houver logo.
+// Exibe a bandeira da seleção ou um marcador quando não houver logo.
 function TeamLogo({ sigla }) {
-  // Busca a imagem da selecao pelo codigo de sigla.
+  // Busca a imagem da seleção pelo código de sigla.
   const logo = getTeamLogo(sigla);
 
   if (!logo) {
-    // Fallback para fases eliminatorias ainda sem selecao definida.
+    // Fallback para fases eliminatórias ainda sem seleção definida.
     return (
       <View style={styles.bandeiraPlaceholder}>
         <Text style={styles.placeholderText}>{sigla.slice(0, 2)}</Text>
@@ -202,5 +291,66 @@ const styles = StyleSheet.create({
     color: "#8fa3b8",
     fontSize: 12,
     flexShrink: 1,
+  },
+  palpiteContainer: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#1e2d3d",
+    paddingTop: 12,
+  },
+  palpiteTitulo: {
+    color: "#f2cc2f",
+    fontSize: 11,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  palpiteLinha: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  palpiteInput: {
+    width: 42,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#28415b",
+    backgroundColor: "#07131f",
+    color: "white",
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  palpiteInputDesabilitado: {
+    opacity: 0.55,
+  },
+  palpiteSeparador: {
+    color: "#8fa3b8",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  botaoSalvarPalpite: {
+    height: 36,
+    minWidth: 74,
+    borderRadius: 8,
+    backgroundColor: "#32d16d",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  botaoSalvarPalpiteDesabilitado: {
+    opacity: 0.45,
+  },
+  botaoSalvarPalpiteTexto: {
+    color: "#04120a",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  palpiteStatus: {
+    color: "#8fa3b8",
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 8,
   },
 });

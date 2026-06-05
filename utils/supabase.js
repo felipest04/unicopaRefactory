@@ -24,7 +24,7 @@ function validarConfiguracaoSupabase() {
 
   if (variaveisAusentes.length > 0) {
     throw new Error(
-      `Configuracao do Supabase ausente. Defina ${variaveisAusentes.join(
+      `Configuração do Supabase ausente. Defina ${variaveisAusentes.join(
         ' e '
       )} no arquivo .env.local e reinicie o Expo.`
     )
