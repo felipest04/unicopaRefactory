@@ -34,9 +34,12 @@ import { getSupabaseClient, isSupabaseConfigurado } from "./utils/supabase";
 import { isPalpiteBloqueado } from "./utils/date";
 
 export default function App() {
+  const [telaPrincipal, setTelaPrincipal] = useState("calendario");
   const [grupoSelecionado, setGrupoSelecionado] = useState("Todos");
+  const [filtroMeusPalpites, setFiltroMeusPalpites] = useState("todos");
   const [jogos, setJogos] = useState([]);
   const [isCarregandoJogos, setIsCarregandoJogos] = useState(true);
+  const [isCarregandoPalpites, setIsCarregandoPalpites] = useState(false);
   const [isImportandoJogos, setIsImportandoJogos] = useState(false);
   const [erroJogos, setErroJogos] = useState("");
   const [isUsandoJogosLocais, setIsUsandoJogosLocais] = useState(false);
@@ -85,6 +88,25 @@ export default function App() {
 
       return acc;
     }, {});
+
+  const carregarPalpitesDoUsuario = async () => {
+    if (!session?.user || !isSupabaseConfigurado()) {
+      setPalpitesPorJogo({});
+      return;
+    }
+
+    setIsCarregandoPalpites(true);
+
+    try {
+      const palpitesDoUsuario = await listarPalpitesDoUsuario(session.user);
+
+      setPalpitesPorJogo(normalizarPalpites(palpitesDoUsuario));
+    } catch (error) {
+      Alert.alert("Erro ao carregar palpites", traduzirErroPalpite(error));
+    } finally {
+      setIsCarregandoPalpites(false);
+    }
+  };
 
   const traduzirErroLogin = (error) => {
     const mensagem = error?.message || "";
@@ -239,6 +261,12 @@ export default function App() {
     carregarJogos();
   }, [session]);
 
+  useEffect(() => {
+    if (session && telaPrincipal === "palpites") {
+      carregarPalpitesDoUsuario();
+    }
+  }, [session, telaPrincipal]);
+
   const grupos = useMemo(
     () =>
       [
@@ -298,6 +326,46 @@ export default function App() {
       ).length,
     [palpitesPreenchidos]
   );
+
+  const meusPalpitesFiltrados = useMemo(() => {
+    if (filtroMeusPalpites === "confirmados") {
+      return palpitesPreenchidos.filter((palpite) =>
+        isPalpiteConfirmado(palpite.status_envio)
+      );
+    }
+
+    if (filtroMeusPalpites === "pendentes") {
+      return palpitesPreenchidos.filter(
+        (palpite) => !isPalpiteConfirmado(palpite.status_envio)
+      );
+    }
+
+    return palpitesPreenchidos;
+  }, [filtroMeusPalpites, palpitesPreenchidos]);
+
+  const meusPalpitesPorData = useMemo(() => {
+    const palpitesPorData = meusPalpitesFiltrados.reduce((acc, palpite) => {
+      const data = palpite.jogo.data_brasilia || "Sem data";
+
+      if (!acc[data]) {
+        acc[data] = [];
+      }
+
+      acc[data].push(palpite);
+      return acc;
+    }, {});
+
+    return Object.keys(palpitesPorData)
+      .sort((dataA, dataB) => dataA.localeCompare(dataB))
+      .map((data) => ({
+        data,
+        palpites: palpitesPorData[data].sort((palpiteA, palpiteB) =>
+          palpiteA.jogo.hora_brasilia.localeCompare(
+            palpiteB.jogo.hora_brasilia
+          )
+        ),
+      }));
+  }, [meusPalpitesFiltrados]);
 
   const rolarFiltros = (direcao) => {
     const proximoScrollX = Math.min(
@@ -698,8 +766,52 @@ export default function App() {
     >
       <Image style={styles.logo} source={require("./assets/unicopa.png")} />
 
-      <Text style={styles.title}>CALENDÁRIO</Text>
+      <Text style={styles.title}>
+        {telaPrincipal === "calendario" ? "CALENDÁRIO" : "MEUS PALPITES"}
+      </Text>
 
+      <View style={styles.abasContainer}>
+        <Pressable
+          onPress={() => setTelaPrincipal("calendario")}
+          style={[
+            styles.abaPrincipal,
+            telaPrincipal === "calendario" && styles.abaPrincipalAtiva,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Abrir calendário"
+        >
+          <Text
+            style={[
+              styles.abaPrincipalTexto,
+              telaPrincipal === "calendario" && styles.abaPrincipalTextoAtivo,
+            ]}
+          >
+            CALENDÁRIO
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setTelaPrincipal("palpites")}
+          style={[
+            styles.abaPrincipal,
+            telaPrincipal === "palpites" && styles.abaPrincipalAtiva,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Abrir meus palpites"
+        >
+          <Text
+            style={[
+              styles.abaPrincipalTexto,
+              telaPrincipal === "palpites" && styles.abaPrincipalTextoAtivo,
+            ]}
+          >
+            MEUS PALPITES
+          </Text>
+        </Pressable>
+      </View>
+
+      {telaPrincipal === "calendario" ? (
+        <>
       <View style={styles.filtrosContainer}>
         <Pressable
           onPress={() => rolarFiltros(-1)}
@@ -942,6 +1054,77 @@ export default function App() {
         }
         showsVerticalScrollIndicator={false}
       />
+        </>
+      ) : (
+        <>
+          <View style={styles.filtrosPalpitesContainer}>
+            {[
+              { valor: "todos", rotulo: "TODOS" },
+              { valor: "pendentes", rotulo: "PENDENTES" },
+              { valor: "confirmados", rotulo: "CONFIRMADOS" },
+            ].map((filtro) => {
+              const isSelecionado = filtroMeusPalpites === filtro.valor;
+
+              return (
+                <Pressable
+                  key={filtro.valor}
+                  onPress={() => setFiltroMeusPalpites(filtro.valor)}
+                  style={[
+                    styles.filtroPalpite,
+                    isSelecionado && styles.filtroPalpiteSelecionado,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Filtrar palpites: ${filtro.rotulo}`}
+                >
+                  <Text
+                    style={[
+                      styles.filtroPalpiteTexto,
+                      isSelecionado && styles.filtroPalpiteTextoSelecionado,
+                    ]}
+                  >
+                    {filtro.rotulo}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {isCarregandoPalpites && (
+            <Text style={styles.statusLista}>CARREGANDO PALPITES...</Text>
+          )}
+
+          <FlatList
+            data={meusPalpitesPorData}
+            keyExtractor={(item) => item.data}
+            contentContainerStyle={styles.lista}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              !isCarregandoPalpites ? (
+                <View style={styles.cardVazio}>
+                  <Text style={styles.cardVazioTitulo}>
+                    Você ainda não cadastrou palpites
+                  </Text>
+                </View>
+              ) : null
+            }
+            renderItem={({ item }) => (
+              <DiaCard
+                data={item.data}
+                jogos={item.palpites.map((palpite) => palpite.jogo)}
+                isPalpitesDisponiveis={
+                  Boolean(session?.user?.id) && isSupabaseConfigurado()
+                }
+                onAlternarFavorito={alternarFavorito}
+                onAlterarPalpite={alterarPalpite}
+                onSalvarPalpite={salvarPalpite}
+                palpitesPorJogo={palpitesPorJogo}
+                palpitesSalvandoPorJogo={palpitesSalvandoPorJogo}
+              />
+
+            )}
+          />
+        </>
+      )}
     </ImageBackground>
   );
 }
@@ -964,6 +1147,38 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
     color: "white",
+  },
+  abasContainer: {
+    width: 320,
+    height: 42,
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  abaPrincipal: {
+    flex: 1,
+    height: 38,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#28415b",
+    backgroundColor: "#0c1b2a",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  abaPrincipalAtiva: {
+    backgroundColor: "#f2cc2f",
+    borderColor: "#f2cc2f",
+  },
+  abaPrincipalTexto: {
+    color: "#8fa3b8",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  abaPrincipalTextoAtivo: {
+    color: "#04120a",
   },
   filtrosContainer: {
     width: 320,
@@ -1240,5 +1455,37 @@ const styles = StyleSheet.create({
     color: "#04120a",
     fontSize: 12,
     fontWeight: "700",
+  },
+  filtrosPalpitesContainer: {
+    width: 320,
+    minHeight: 54,
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  filtroPalpite: {
+    flex: 1,
+    height: 38,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#28415b",
+    backgroundColor: "#0c1b2a",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  filtroPalpiteSelecionado: {
+    backgroundColor: "#f2cc2f",
+    borderColor: "#f2cc2f",
+  },
+  filtroPalpiteTexto: {
+    color: "#8fa3b8",
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  filtroPalpiteTextoSelecionado: {
+    color: "#04120a",
   },
 });
