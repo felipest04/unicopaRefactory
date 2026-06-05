@@ -131,36 +131,3 @@ export async function confirmarPalpitesDoUsuario(authUser, palpites) {
 
   return palpitesConfirmados;
 }
-
-export async function salvarPalpiteDoJogoComUpsert({
-  authUser,
-  jogoId,
-  golsCasa,
-  golsFora,
-  statusEnvio,
-}) {
-  const usuarioId = await obterOuCriarUsuarioInterno(authUser);
-  const supabase = getSupabaseClient();
-  const palpite = {
-    id_usuario: usuarioId,
-    id_jogo: jogoId,
-    placar_time_casa: golsCasa,
-    placar_time_fora: golsFora,
-  };
-
-  if (statusEnvio) {
-    palpite.status_envio = statusEnvio;
-  }
-
-  const { data, error } = await supabase
-    .from(TABELA_PALPITES)
-    .upsert(palpite, { onConflict: "id_usuario,id_jogo" })
-    .select(COLUNAS_PALPITE)
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data;
-}
