@@ -44,7 +44,7 @@ export default function App() {
   const [erroJogos, setErroJogos] = useState("");
   const [isUsandoJogosLocais, setIsUsandoJogosLocais] = useState(false);
   const [session, setSession] = useState(null);
-  const [isVerificandoSessao, setIsVerificandoSessao] = useState(true);
+  const [isVerificandoSessao, setIsVerificandoSessao] = useState(false);
   const [isEntrando, setIsEntrando] = useState(false);
   const [erroLogin, setErroLogin] = useState("");
   const [telaAutenticacao, setTelaAutenticacao] = useState("login");
@@ -172,34 +172,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!isSupabaseConfigurado()) {
-      setIsVerificandoSessao(false);
-      return;
-    }
-
-    const supabase = getSupabaseClient();
-
-    supabase.auth
-      .getSession()
-      .then(({ data }) => {
-        setSession(data.session || null);
-      })
-      .catch((error) => {
-        setErroLogin(traduzirErroLogin(error));
-      })
-      .finally(() => {
-        setIsVerificandoSessao(false);
-      });
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, novaSession) => {
-        setSession(novaSession);
-      }
-    );
-
-    return () => {
-      listener.subscription.unsubscribe();
-    };
+    setSession(null);
+    setTelaAutenticacao("login");
+    setIsVerificandoSessao(false);
   }, []);
 
   const carregarJogos = async () => {
